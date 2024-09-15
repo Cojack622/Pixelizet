@@ -169,7 +169,7 @@ class PaletteColor {
         void perturb(cv::Vec3d direction, double alpha) {
             color[0] += alpha * direction[0];
             color[1] += alpha * direction[1];
-            color[2] += alpha * direction[1];
+            color[2] += alpha * direction[2];
         }
 
         void updateWeight(vector<SuperPixel>* sPixels, int clusterIndex, double probSuperPixel) {
@@ -182,15 +182,21 @@ class PaletteColor {
 
         cv::PCA PCA() {
             //Data as row, or {[l1, a1, b1], [l2, a2, b2], [l3, a3, b3]}
-            cv::Mat data(associatedPixels.size(), 3, CV_64F);
+            cv::Mat data(associatedPixels.size(), 3, CV_32F);
+            
             //cv::Mat mean(associatedPixels.size(), 3, CV_32F);
             for (int i = 0; i < data.rows; i++) {
-                data.at<double>(i, 0) = associatedPixels[i].color[0] / 100.0;
-                data.at<double>(i, 1) = associatedPixels[i].color[1] / 127;
-                data.at<double>(i, 2) = associatedPixels[i].color[2] / 127;
+                data.at<float>(i, 0) = associatedPixels[i].color[0];
+                data.at<float>(i, 1) = associatedPixels[i].color[1];
+                data.at<float>(i, 2) = associatedPixels[i].color[2];
             }
 
-            return cv::PCA(data, cv::Mat(), cv::PCA::DATA_AS_ROW, 1);
+            //cv::Mat mean(1, 3, CV_32F);
+            //data.at<float>(0, 0) = color[0];
+            //data.at<float>(0, 1) = color[1];
+            //data.at<float>(0, 2) = color[2];
+
+            return cv::PCA(data, cv::Mat(), cv::PCA::DATA_AS_ROW);
         }
 
         cv::Vec3f average(PaletteColor color2) {
@@ -575,10 +581,14 @@ void PaletteExpand(vector<PaletteColor>* palette, vector<Cluster>* clusters, dou
         PaletteColor& ck2 = (*palette)[cluster.sub2Index];
 
 
-        cv::PCA pcAnalysis = ck1.PCA();
-        cv::Vec3f principleAxis = pcAnalysis.eigenvectors.at<cv::Vec3f>(0);
-        //ck1.perturb(principleAxis, 2);
-        ck2.perturb(principleAxis, 2);
+        if(ck1.associatedPixels.size() > 0){
+            cv::PCA pcAnalysis = ck1.PCA();
+            cv::Vec3f principleAxis = cv::Vec3f(pcAnalysis.eigenvectors.at<float>(0, 0), pcAnalysis.eigenvectors.at<float>(0, 1), pcAnalysis.eigenvectors.at<float>(0, 2));
+
+            //ck1.perturb(principleAxis, 2);
+            ck2.perturb(principleAxis, 1);
+        }
+
         
     }
 
@@ -667,17 +677,18 @@ int main(int argc, char* args[])
     protoCopy.copy(criticalCluster);
     
     cv::Vec3f principleAxis = cv::Vec3f(wholeImagePCA.eigenvectors.at<float>(0,0), wholeImagePCA.eigenvectors.at<float>(0, 1), wholeImagePCA.eigenvectors.at<float>(0, 2));
-    
+
+
     principleAxis *= 1.5;
 
 
-    /*if (DEBUG) {
+    if (DEBUG) {
         cout << principleAxis[0];
         cout << "\n";
         cout << principleAxis[1];
         cout << "\n";
         cout << principleAxis[2];
-    }*/
+    }
 
     criticalCluster.perturb(principleAxis, 1);
     protoCopy.perturb(principleAxis, -1);
@@ -691,15 +702,14 @@ int main(int argc, char* args[])
     c1.sub2Index = 1;
     clusters.push_back(c1);
 
-    float max = wholeImagePCA.eigenvalues.at<double>(0);
-
+    float max = wholeImagePCA.eigenvalues.at<float>(0);
     double temperature = 1.1 * (max);
     double finalTemp = 1.0;
     double alpha = 0.7;
     
     //If total palette change is less than var, palette has converged
-    float paletteEpsilon = 1.0f;
-    float clusterEpsilon = 0.25f; 
+    float paletteEpsilon = 5.0f;
+    float clusterEpsilon = 2.0f; 
 
     
 
@@ -715,10 +725,7 @@ int main(int argc, char* args[])
             cout << "Breaks here";
         }*/
 
-        if (DEBUG) {
-            cout << temperature;
-            cout << "\n";
-        }
+        
         //SuperPixels
         //If statement is unneccesary since 0 < 0 is false 
         if (newPoints.size() != 0) {
@@ -748,6 +755,10 @@ int main(int argc, char* args[])
         
         if (change < paletteEpsilon) {
             
+            if (DEBUG) {
+                cout << temperature;
+                cout << "\n";
+            }
             //Lower Temperature
             temperature = alpha * temperature;
 
@@ -764,22 +775,25 @@ int main(int argc, char* args[])
     }
 
     double beta = 1.1;
-    cv::Mat labOutput(hOut, wOut, CV_32FC3);
+    cv::Mat labOutput(hOut, wOut, CV_8UC3);
 
     for (int r = 0; r < hOut; r++) {
         for (int c = 0; c < wOut; c++) {
             SuperPixel& sPixel = superPixels[c + r * wOut];
-            labOutput.at<cv::Vec3f>(r, c) = cv::Vec3f(sPixel.paletteColor[0], sPixel.paletteColor[1] * beta, sPixel.paletteColor[2] * beta);
+            /*labOutput.at<cv::Vec3b>(r, c) = cv::Vec3b((unsigned char)(sPixel.paletteColor[0] * (100.0/255.0)), (unsigned char) (sPixel.paletteColor[1] * beta - 128), (unsigned char) (sPixel.paletteColor[2] * beta - 128));*/
+
         }
     }
 
-    cv::Mat output(hOut, wOut, CV_32FC3);
-    cv::cvtColor(labOutput, output, cv::COLOR_Lab2BGR);
+    cv::Mat rgbOutput(hOut, wOut, CV_8UC3);
+    cv::cvtColor(labOutput, rgbOutput, cv::COLOR_Lab2BGR);
 
-    cv::imwrite("Output.png", output);
+    cv::imshow("yahoo!", rgbOutput);
+    cv::waitKey();
 
-    /*cv::imshow("Pixelated Image", output);
-    cv::waitKey();*/
+    cv::imwrite("Output.png", rgbOutput);
+
+    
 
 
 
