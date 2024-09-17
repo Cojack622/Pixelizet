@@ -5,6 +5,36 @@
 #include <opencv2/opencv.hpp>
 #include <opencv2/core/hal/interface.h>
 
+//#define PixelAssociateSearchDiameter 3
+//#define colorDistanceWeight 45
+//#define alpha 0.7
+//#define paletteEpsilon 3.0f
+//#define clusterEpsilon 0.5f
+//#define finalTemp 1.0
+//#define bilatFilterDiameter 5
+//#define bilatFilterAlpha 30
+//#define paletteSize 8
+////Creates a outputScale x y image where y aligns with the input image's aspect ratio
+//#define outputScale 64
+
+
+
+//Has the potential to make a REALLY GOOD obama
+//#define PixelAssociateSearchDiameter 3
+//#define colorDistanceWeight 25
+//#define alpha 0.7
+//#define paletteEpsilon 4.0f
+////Controls how far apart two clusters have to be before they are considered to be different
+//#define clusterEpsilon 1.0f
+//#define finalTemp 1.0
+//#define bilatFilterDiameter 3
+//#define bilatFilterAlpha 25
+//#define paletteSize 8
+////Creates a outputScale x y image where y aligns with the input image's aspect ratio
+//#define outputScale 64
+//#define inputFile "test_input/obamna.png"
+
+
 using namespace std; 
 // 
 //struct LAB_Color {
@@ -166,10 +196,10 @@ class PaletteColor {
             color = avg;
         }
 
-        void perturb(cv::Vec3d direction, double alpha) {
-            color[0] += alpha * direction[0];
-            color[1] += alpha * direction[1];
-            color[2] += alpha * direction[2];
+        void perturb(cv::Vec3d direction, double mod) {
+            color[0] += mod * direction[0];
+            color[1] += mod * direction[1];
+            color[2] += mod * direction[2];
         }
 
         void updateWeight(vector<SuperPixel>* sPixels, int clusterIndex, double probSuperPixel) {
@@ -218,7 +248,7 @@ cv::Mat bilateralFilterMat(vector<SuperPixel>* sPixels, int wOut, int hOut) {
         }
     }
 
-    cv::bilateralFilter(averages, bilatFilter, 5, 50, 50);
+    cv::bilateralFilter(averages, bilatFilter, bilatFilterDiameter, bilatFilterAlpha, bilatFilterAlpha);
     return bilatFilter;
 
 }
@@ -355,9 +385,19 @@ PaletteColor initialize(const cv::Mat& sourceMat, vector<SuperPixel>* sPixels, v
         (*sPixels)[i].clearAssociated();
     }
 
-    cv::Point2i regions[] = { cv::Point2i(0,1), cv::Point2i(1,1), cv::Point2i(1,0), cv::Point2i(1,-1), 
-        cv::Point2i(0,-1), cv::Point2i(-1,-1), cv::Point2i(-1, 0), cv::Point2i(-1,1)};
+    int searchBoxDiameter = 5;
+    /*cv::Point2i regions[] = { cv::Point2i(0,1), cv::Point2i(1,1), cv::Point2i(1,0), cv::Point2i(1,-1), 
+        cv::Point2i(0,-1), cv::Point2i(-1,-1), cv::Point2i(-1, 0), cv::Point2i(-1,1)};*/
+    vector<cv::Point2i> regions;
+    for (int i = -(searchBoxDiameter / 2); i < (searchBoxDiameter / 2) + 1; i++) {
+        for (int j = -(searchBoxDiameter / 2); j < (searchBoxDiameter / 2) + 1; j++) {
 
+            if (i != 0 || j != 0) {
+                regions.push_back(cv::Point2i(i, j));
+            }
+            
+        }
+    }
 
     //Associate Pixels and calculate mean
     int counter = 0;
@@ -376,7 +416,7 @@ PaletteColor initialize(const cv::Mat& sourceMat, vector<SuperPixel>* sPixels, v
             int minIndex = index;
             double minDistance = (*sPixels)[index].differenceCost(currentPix, diffCoeff);
 
-            for (int i = 1; i < 8; i++) {
+            for (int i = 1; i < regions.size(); i++) {
                 if (inBounds(cOut + regions[i].x, rOut + regions[i].y, wOut, hOut)) {
                     index = cOut + regions[i].x + (rOut + regions[i].y) * wOut;
                     double dist = (*sPixels)[index].differenceCost(currentPix, diffCoeff);
@@ -413,8 +453,8 @@ void CalculateProbabilities(const cv::Mat& bilatFilter, vector<SuperPixel>* sPix
             double max = probabiltyBelongsToCluster(&sPixel, &(*palette)[0], bilat, temperature);
             int maxIndx = 0;
             double sumNorm = max;
-            int paletteSize = (*palette).size();
-            for (int i = 1; i < paletteSize; i++) {
+            int pSize = (*palette).size();
+            for (int i = 1; i < pSize; i++) {
                 double temporary = probabiltyBelongsToCluster(&sPixel, &(*palette)[i], bilat, temperature);
                 sumNorm += temporary;
                 if (temporary > max) {
@@ -490,12 +530,6 @@ void MergeSubClusters(vector<PaletteColor>* palette, vector<Cluster>* clusters) 
     }
 
     *palette = finalPalette;
-}
-
-void SplitCluster(vector<PaletteColor>* palette, vector<Cluster>* clusters, double epsilon, int clusterIndex) {
-
-    
-    
 }
 
 void PaletteExpand(vector<PaletteColor>* palette, vector<Cluster>* clusters, double epsilon, int maxPalette) {
@@ -585,7 +619,7 @@ void PaletteExpand(vector<PaletteColor>* palette, vector<Cluster>* clusters, dou
             cv::PCA pcAnalysis = ck1.PCA();
             cv::Vec3f principleAxis = cv::Vec3f(pcAnalysis.eigenvectors.at<float>(0, 0), pcAnalysis.eigenvectors.at<float>(0, 1), pcAnalysis.eigenvectors.at<float>(0, 2));
 
-            //ck1.perturb(principleAxis, 2);
+            ck1.perturb(principleAxis, -1);
             ck2.perturb(principleAxis, 1);
         }
 
@@ -594,8 +628,35 @@ void PaletteExpand(vector<PaletteColor>* palette, vector<Cluster>* clusters, dou
 
 }
 
-void ShowSuperPixelOutput() {
+void ShowSuperPixelOutput(vector<SuperPixel>* sPixels, int convergance, int wOut, int hOut) {
+    cv::Mat spOutput = cv::Mat::zeros(hOut, wOut, CV_32FC3);
 
+    for (int i = 0; i < (*sPixels).size(); i++) {
+        SuperPixel& superPixel = (*sPixels)[i];
+        cv::Vec3f checkColor(0.0f, 0.0f, 0.0f);
+        cv::Vec3f randColor(rand() % 10, rand() % 10, rand() % 10);
+        for (int j = 0; j < superPixel.associatedPixels.size(); j++) {
+            Pixel& p = superPixel.associatedPixels[j];
+            
+
+            cv::Vec3f color = spOutput.at<cv::Vec3f>(p.position);
+            
+            if (color == checkColor) {
+                spOutput.at<cv::Vec3f>(p.position) = superPixel.paletteColor + randColor;
+            }
+            else {
+                spOutput.at<cv::Vec3f>(p.position) = cv::Vec3f(74.93, 23.94, 78.96);
+            }
+
+
+        }
+    }
+
+    
+    cv::Mat showMat(spOutput.rows, spOutput.cols, CV_32FC3);
+    cv::cvtColor(spOutput, showMat, cv::COLOR_Lab2BGR);
+    cv::imshow("Palette Image", showMat);
+    cv::waitKey();
 }
 
 
@@ -604,68 +665,35 @@ int main(int argc, char* args[])
 {
 
     bool DEBUG = true;
+    
+    //string inputFile = "test_input/obamna.png";
+    string outputFile = "test_output/output.png";
+    
+    cv::Mat inputImage = cv::imread(inputFile, cv::IMREAD_COLOR);
 
-    int wOut = 23;
-    int hOut = 32;
-
-    int paletteSize = 8;
-
-    cv::Mat inputImage = cv::imread("Obamna.png", cv::IMREAD_COLOR);
-
-    //cv::imshow("1", inputImage);
-    //cv::waitKey();
+    float scale = outputScale / 1080.0;
+    int wOut = (int)(inputImage.cols * scale);
+    int hOut = (int)(inputImage.rows * scale);
 
     cv::Mat floatImage(inputImage.rows, inputImage.cols, CV_32FC3);
     inputImage.convertTo(floatImage, CV_32F, 1.0/255);
 
-    //cv::imshow("2", floatImage);
-    //cv::waitKey();
-
-    cv::Mat croppedImage = floatImage(cv::Range(0, (floatImage.cols / wOut) * wOut), cv::Range(0, (floatImage.rows / hOut) * hOut));
-    
-    //cv::imshow("3", croppedImage);
-    //cv::waitKey();
+    cv::Mat croppedImage = floatImage(cv::Range(0, (floatImage.rows / hOut) * hOut), cv::Range(0, (floatImage.cols / wOut) * wOut));
 
     cv::Mat sourceMat(croppedImage.rows, croppedImage.cols, CV_32FC3);
     cv::cvtColor(croppedImage, sourceMat, cv::COLOR_BGR2Lab);
     
     int N = wOut * hOut;
     int M = sourceMat.rows * sourceMat.cols;
-    double diffCoeff = 45 * sqrt(N / (double)M);
-   /* cv::imshow("4", sourceMat);
-    cv::waitKey();*/
-
-
-    //Deconstruct to free data
-
-    
-    
-
-    //cv::Rect crop(0, 0, (floatImage.cols / wOut) * wOut, (floatImage.rows / hOut) * hOut);
-    //cv::Rect crop(cv::Range(0, (floatImage.cols / wOut) * wOut), cv::Range(0, (floatImage.rows / hOut) * hOut));
-    //floatImage = floatImage(cv::Range(0, (floatImage.cols / wOut) * wOut), cv::Range(0, (floatImage.rows / hOut) * hOut));
-
-    
-
-    //floatImage.~Mat();
-
-   //cv::Mat sourceMat(floatImage.rows, floatImage.cols, CV_32F);
-
-    
+    double diffCoeff = colorDistanceWeight * sqrt(N / (double)M);
 
 
     vector<Cluster> clusters;
     vector<PaletteColor> palette;
     vector<SuperPixel> superPixels;
 
-
-    
-
-
     //Initialize Superclusters and initial cluster
-    PaletteColor criticalCluster =  initialize(sourceMat, &superPixels, &palette, wOut, hOut);
-
-    
+    PaletteColor criticalCluster =  initialize(sourceMat, &superPixels, &palette, wOut, hOut);    
 
     //Initialize cluster weights/sub cluster
     criticalCluster.setWeight(0.5f);
@@ -679,16 +707,16 @@ int main(int argc, char* args[])
     cv::Vec3f principleAxis = cv::Vec3f(wholeImagePCA.eigenvectors.at<float>(0,0), wholeImagePCA.eigenvectors.at<float>(0, 1), wholeImagePCA.eigenvectors.at<float>(0, 2));
 
 
-    principleAxis *= 1.5;
+    /*principleAxis *= 1.5;*/
 
 
-    if (DEBUG) {
+    /*if (DEBUG) {
         cout << principleAxis[0];
         cout << "\n";
         cout << principleAxis[1];
         cout << "\n";
         cout << principleAxis[2];
-    }
+    }*/
 
     criticalCluster.perturb(principleAxis, 1);
     protoCopy.perturb(principleAxis, -1);
@@ -702,14 +730,14 @@ int main(int argc, char* args[])
     c1.sub2Index = 1;
     clusters.push_back(c1);
 
-    float max = wholeImagePCA.eigenvalues.at<float>(0);
-    double temperature = 1.1 * (max);
-    double finalTemp = 1.0;
-    double alpha = 0.7;
-    
-    //If total palette change is less than var, palette has converged
-    float paletteEpsilon = 5.0f;
-    float clusterEpsilon = 2.0f; 
+    float max = 1.1 * wholeImagePCA.eigenvalues.at<float>(0);
+    double temperature = max;
+    //double finalTemp = 1.0;
+    //double alpha = 0.7;
+    //
+    ////If total palette change is less than var, palette has converged
+    //float paletteEpsilon = 2.5f;
+    //float clusterEpsilon = 2.0f; 
 
     
 
@@ -721,11 +749,6 @@ int main(int argc, char* args[])
 
     int loopCounter = 0;
     while (temperature > finalTemp) {
-       /* if (loopCounter == ) {
-            cout << "Breaks here";
-        }*/
-
-        
         //SuperPixels
         //If statement is unneccesary since 0 < 0 is false 
         if (newPoints.size() != 0) {
@@ -737,40 +760,33 @@ int main(int argc, char* args[])
         newPoints = LaplachianSmooth(&superPixels, 0.4f, wOut, hOut);
         bilatFilter = bilateralFilterMat(&superPixels, wOut, hOut);
 
-        
-
-
-        cv::imwrite("bilateral.png", bilatFilter);
-
         //SuperPixel/Palette Association
         CalculateProbabilities(bilatFilter, &superPixels, &palette, temperature, wOut, hOut);
 
         //Refine and Expand
         PaletteRefine(bilatFilter, &superPixels, &palette, &oldColors, wOut, hOut);
 
-        
-
         //If palette convereged
         double change = PaletteChange(&oldColors, &palette);
         
-        if (change < paletteEpsilon) {
-            
-            if (DEBUG) {
-                cout << temperature;
-                cout << "\n";
-            }
+        if (change < paletteEpsilon) {   
+
+            cout << 100 * (1 - temperature / max);
+            cout << "\n";
             //Lower Temperature
             temperature = alpha * temperature;
 
             if (clusters.size() < paletteSize) {
+                //ShowSuperPixelOutput(&superPixels, loopCounter, sourceMat.cols, sourceMat.rows);
                 PaletteExpand(&palette, &clusters, clusterEpsilon, paletteSize);
+            }
+            else {
+                cout << "Got all clusters";
             }
 
             loopCounter++;
 
         }
-        /*cout << loopCounter;
-        cout << "\n";*/
         
     }
 
@@ -780,46 +796,24 @@ int main(int argc, char* args[])
     for (int r = 0; r < hOut; r++) {
         for (int c = 0; c < wOut; c++) {
             SuperPixel& sPixel = superPixels[c + r * wOut];
-            /*labOutput.at<cv::Vec3b>(r, c) = cv::Vec3b((unsigned char)(sPixel.paletteColor[0] * (100.0/255.0)), (unsigned char) (sPixel.paletteColor[1] * beta - 128), (unsigned char) (sPixel.paletteColor[2] * beta - 128));*/
+            labOutput.at<cv::Vec3b>(r, c) = cv::Vec3b((unsigned char)(sPixel.paletteColor[0] * (255.0/100.0)), (unsigned char) (sPixel.paletteColor[1] * beta - 128), (unsigned char) (sPixel.paletteColor[2] * beta - 128));
 
         }
+    }
+
+    cv::Mat paletteOutput(1, palette.size(), CV_8UC3);
+    for (int p = 0; p < palette.size(); p++) {
+        paletteOutput.at<cv::Vec3b>(0, p) = cv::Vec3b((unsigned char)(palette[p].color[0] * (255.0 / 100.0)), (unsigned char)(palette[p].color[1] * beta - 128), (unsigned char)(palette[p].color[2] * beta - 128));
     }
 
     cv::Mat rgbOutput(hOut, wOut, CV_8UC3);
     cv::cvtColor(labOutput, rgbOutput, cv::COLOR_Lab2BGR);
 
-    cv::imshow("yahoo!", rgbOutput);
-    cv::waitKey();
+    cv::Mat rgbPalette(1, palette.size(), CV_8UC3);
+    cv::cvtColor(paletteOutput, rgbPalette, cv::COLOR_Lab2BGR);
 
-    cv::imwrite("Output.png", rgbOutput);
-
-    
-
-
-
-
-
-    
-
-    
-    
-    //Split First palette color into 2
-    
-
-
-
-   
+    cv::imwrite("Palette.png", rgbPalette);
+    cv::imwrite(outputFile, rgbOutput);
 
     return 0;
 }
-
-// Run program: Ctrl + F5 or Debug > Start Without Debugging menu
-// Debug program: F5 or Debug > Start Debugging menu
-
-// Tips for Getting Started: 
-//   1. Use the Solution Explorer window to add/manage files
-//   2. Use the Team Explorer window to connect to source control
-//   3. Use the Output window to see build output and other messages
-//   4. Use the Error List window to view errors
-//   5. Go to Project > Add New Item to create new code files, or Project > Add Existing Item to add existing code files to the project
-//   6. In the future, to open this project again, go to File > Open > Project and select the .sln file
