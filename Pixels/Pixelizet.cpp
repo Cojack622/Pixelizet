@@ -9,7 +9,6 @@
 
 #include "json.hpp"
 
-//Has the potential to make a REALLY GOOD obama
 #define PixelAssociateSearchDiameter 7
 #define colorDistanceWeight 45
 #define alpha 0.7
@@ -46,37 +45,34 @@ class PaletteColor;
 struct Pixel {
     cv::Vec3f color;
     cv::Point2f position;
+
+    Pixel(const cv::Vec3f color, const cv::Point2f position) : color(color), position(position){}
 };
 
 struct Cluster {
     cv::Vec3f color;
     int sub1Index, sub2Index;
+
+
 };
 
 //Helper methods
-double ColorDifference(cv::Vec3f color1, cv::Vec3f color2) {
-    //cv::Vec3f diffVec= color2 - color1;
-    double sum = 0.0;
-
-    sum += powf(color2[0] - color1[0], 2);
-    sum += powf(color2[1] - color1[1], 2);
-    sum += powf(color2[2] - color1[2], 2);
-
-    return sqrt(sum);
+inline double ColorDifference(cv::Vec3f color1, cv::Vec3f color2) {
+    cv::Vec3f diff = color2 - color1;
+    return cv::norm(diff);
 }
 
-double PositionDifference(cv::Point2f point1, cv::Point2f point2){
-    cv::Point2f diff = point2 - point1; 
-    double sum = powf(diff.x, 2) + powf(diff.y, 2);
-    return sqrt(sum);
+inline double PositionDifference(cv::Point2f point1, cv::Point2f point2){
+    cv::Point2f diff = point2 - point1;
+    return cv::norm(diff);
 }
 
 
-bool inBounds(cv::Point2i point, int w, int h) {
+inline bool inBounds(cv::Point2i point, int w, int h) {
     return (point.x >= 0 && point.x < w && point.y >= 0 && point.y < h);
 }
 
-bool inBounds(int x, int y, int w, int h) {
+inline bool inBounds(int x, int y, int w, int h) {
     return (x >= 0 && x < w && y >= 0 && y < h);
 }
 
@@ -338,9 +334,7 @@ PaletteColor initialize(const cv::Mat& sourceMat, std::vector<SuperPixel>* sPixe
             
             cv::Vec3f pix = *sourceMat.ptr<cv::Vec3f>(r, c);
 
-            Pixel pixelObj;
-            pixelObj.color = pix;
-            pixelObj.position = testPoint;
+            Pixel pixelObj(pix, testPoint);
 
             (*sPixels)[currentIndex].associatedPixels.push_back(pixelObj);
             (*sPixels)[currentIndex].addToAvg(pix[0], pix[1], pix[2]);
@@ -364,7 +358,6 @@ PaletteColor initialize(const cv::Mat& sourceMat, std::vector<SuperPixel>* sPixe
 
 void AssociateRegionToSuperPix(const cv::Mat& sourceMat, std::vector<SuperPixel>* sPixels, std::vector<cv::Point2i>* regions, std::mutex* writeMtx, int rStart, int cStart) {
     
-    //This is dumb
     int regionR = sourceMat.rows / _numThreads;
     int regionC = sourceMat.cols / _numThreads;
 
@@ -380,11 +373,9 @@ void AssociateRegionToSuperPix(const cv::Mat& sourceMat, std::vector<SuperPixel>
 
     for (int r = rStart; r < rEnd; r++) {
         for (int c = cStart; c < cEnd; c++) {
-
-            Pixel currentPix;
-            currentPix.position.x = c;
-            currentPix.position.y = r;
-            currentPix.color = *(sourceMat.ptr<cv::Vec3f>(r, c));
+            Pixel currentPix(
+                *(sourceMat.ptr<cv::Vec3f>(r, c)), 
+                cv::Point2f(c, r));
 
             int cOut = (int)((c / (float)sourceMat.cols) * wOut);
             int rOut = (int)((r / (float)sourceMat.rows) * hOut);
@@ -449,7 +440,10 @@ void AssociateRegionToSuperPix(const cv::Mat& sourceMat, std::vector<SuperPixel>
     
 };
 
+
+//For each superPixel, recalculate the probabilty that it belongs to each cluster
 void CalculateProbabilities(const cv::Mat& bilatFilter, std::vector<SuperPixel>* sPixels, std::vector<PaletteColor>* palette, double temperature) {
+
     //Calculate P(Ck | Ps)
     for (int r = 0; r < hOut; r++) {
         for (int c = 0; c < wOut; c++) {
@@ -804,7 +798,7 @@ bool is_file_exist(const char* fileName)
     return static_cast<bool>(std::ifstream(fileName));
 }
 
-void WriteOutputToFile(std::vector<SuperPixel>* superPixels) {
+void WriteOutputToFile(std::vector<SuperPixel>* superPixels, const std::string outputFile) {
     float beta = 1.1;
     cv::Mat labOutput(hOut, wOut, CV_8UC3);
 
@@ -831,14 +825,14 @@ void WriteOutputToFile(std::vector<SuperPixel>* superPixels) {
 
     //Spinlock to wait for output/test.png to exist
     //i is a failsafe
-    int i = 0;
-    while (!is_file_exist("output/outputLarge.png") && i++ < 10000) {}
+    //int i = 0;
+    //while (!is_file_exist("output/outputLarge.png") && i++ < 10000) {}
         
     cv::imwrite("output/outputLarge.png", rgbLarge);
 }
 
 //what coding as quickly as possible does to a man
-void GetHyperparameters(std::string parameterFile) {
+inline void GetHyperparameters(const std::string& parameterFile) {
     std::ifstream infile(parameterFile);
 
     std::string line;

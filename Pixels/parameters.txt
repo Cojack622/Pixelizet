@@ -1,0 +1,48 @@
+//Searches all superpixels in a box of given diameter to see if a given pixel is associated with that pixel
+//If Superpixels dont quite capture the essential shapes of image, consider increasing this value 
+//Can greatly increase runtime with little benefit
+//Recommended Range = (3, input image Size)
+Pixel Association Search Diameter: 5
+
+//Controls how many pixel neighbors should have their color "smoothed" in the bilateral filter
+//Increase if algorithm is giving background "unimportant" colors too much attention/too many different colors in palette
+//Recommended Range = (3, output image size)
+Bilat Filter Diameter: 3 
+
+//Controls the relative weight of smoothing
+//Increase for same reason as Bilat Filter Diameter
+//Recommended Range = (10, 100)
+Bilateral Filter Alpha: 20
+
+//Controls how many threads to use when splitting SuperPixel Association
+//Recommended Range = (1, however many you want)
+Number of Threads: 5
+_______________________________________________________________________________________________________________________________________________________________
+//These Values are highly important to algorithm working, but can heavily affect the end result (for better or worse). Save these values in case you edit them.
+_______________________________________________________________________________________________________________________________________________________________
+
+//Controls how different two colors need to be before the palette can consider them sufficiently different
+//Recommended Range = (0.25, 2)
+Cluster Epsilon: 0.5
+
+//Controls the total difference in palette before system converges and tries to split colors
+//Can heavily affect runtime
+//Recommended Range = (0.5, 4)
+Palette Epsilon: 2
+
+//Controls the relative weight superpixels give to color difference vs positional difference when associating pixels to superpixels
+//Lower values give higher importance to color difference, higher gives more to positional
+//Recommended Range = (10, 50)
+Color distance weight: 45 
+
+________________________________________________________________________________________________________________________________________________________________
+//Ouput will probably be worse if you edit these values
+________________________________________________________________________________________________________________________________________________________________
+
+//Controls how much to decrease temperature on convergance 
+//New Temperature = Temp-Alpha * old Temperature
+Temp-Alpha: 0.7, 
+
+//Controls the temperature that will cause the program to exit
+Final Temperature: 1,
+ 
