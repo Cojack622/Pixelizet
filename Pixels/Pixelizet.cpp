@@ -84,8 +84,6 @@ class SuperPixel {
 
     public:
 
-        /*static double diffCoeff;*/
-
         cv::Vec3f averageColor;
         cv::Vec3f paletteColor;
         std::vector<Pixel> associatedPixels;
@@ -107,10 +105,9 @@ class SuperPixel {
             position = cv::Point2f(x / setSize, y / setSize);
         }
 
-        //Come back here tomorrow
         void addPixel(Pixel pix) {
             associatedPixels.push_back(pix);
-            //Add color here too it just makes sense
+            
             x += pix.position.x;
             y += pix.position.y;
 
@@ -118,7 +115,6 @@ class SuperPixel {
             aAvg += pix.color[1];
             bAvg += pix.color[2];
         }
-        /*m * sqrt(N / (float)M)*/
 
         double differenceCost(Pixel pix, double diffCoeff) {
             return ColorDifference(pix.color, paletteColor) + diffCoeff * PositionDifference(pix.position, position);
@@ -552,11 +548,9 @@ void PaletteExpand(std::vector<PaletteColor>* palette, std::vector<Cluster>* clu
         PaletteColor& ck2 = (*palette)[cluster.sub2Index];
 
         double split = ColorDifference((*palette)[cluster.sub1Index].color, (*palette)[cluster.sub2Index].color);
-        //cout << split;
-        //cout << "\n";
+
         if (split > epsilon) {
 
-            //cout << ck1.associatedPixels.size();
             //Create a new cluster to store Ck2
             //Ck1 stays as first cluster object 
             Cluster newCluster;
@@ -592,8 +586,6 @@ void PaletteExpand(std::vector<PaletteColor>* palette, std::vector<Cluster>* clu
             cluster.color = ck1.color;
 
             PaletteColor ck2Copy;
-            //ck2Copy.copy(ck2);
-
             PaletteColor& ck2 = (*palette)[newCluster.sub1Index];
             ck2.setWeight(ck2.weight / 2);
             ck2Copy.copy(ck2);
@@ -932,6 +924,7 @@ int main(int argc, char* args[])
     while (temperature > _finalTemp) {
         //SuperPixels
         //If statement is unneccesary since 0 < 0 is false 
+        //But just in case
         if (newPoints.size() != 0) {
             for (int i = 0; i < superPixels.size(); i++) {
                 superPixels[i].position = newPoints[i];
